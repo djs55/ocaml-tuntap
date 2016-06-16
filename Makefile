@@ -1,9 +1,8 @@
-# OASIS_START
-# DO NOT EDIT (digest: a3c674b4239234cbbe53afe090018954)
 
 SETUP = ocaml setup.ml
+WINPCAP = https://www.winpcap.org/install/bin/WpdPack_4_1_2.zip
 
-build: setup.data
+build: setup.data depends
 	$(SETUP) -build $(BUILDFLAGS)
 
 doc: setup.data build
@@ -38,4 +37,7 @@ configure:
 
 .PHONY: build doc test all install uninstall reinstall clean distclean configure
 
-# OASIS_STOP
+depends:
+ifeq ($(OS),Windows_NT)
+	if [ ! -d WpdPack ]; then curl $(WINPCAP) -o winpcap.zip; unzip winpcap.zip; fi
+endif

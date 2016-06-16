@@ -4,3 +4,5 @@ setup.log
 *.native
 _build
 api.docdir
+WpdPack
+winpcap.zip
