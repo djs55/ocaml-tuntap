@@ -64,3 +64,4 @@ true: annot, bin_annot
 # OASIS_STOP
 <lib>: include
 true: annot, bin_annot, debug
+<WpdPack>: not_hygienic
