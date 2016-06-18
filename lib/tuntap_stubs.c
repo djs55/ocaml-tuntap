@@ -21,16 +21,20 @@
 #include <errno.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <sys/types.h>
+#ifdef __FreeBSD__
+#include <netinet/in.h>
+#endif /* __FreeBSD__ */
+#ifdef WIN32
+#include "../../WpdPack/Include/pcap/pcap.h"
+#else
 #include <err.h>
 #include <arpa/inet.h>
 #include <sys/ioctl.h>
 #include <net/if.h>
-#include <sys/types.h>
 #include <sys/socket.h>
-#ifdef __FreeBSD__
-#include <netinet/in.h>
-#endif /* __FreeBSD__ */
 #include <ifaddrs.h>
+#endif /* WIN32 */
 #include <assert.h>
 
 #include <caml/mlvalues.h>
@@ -170,7 +174,9 @@ get_macaddr(value devname)
 }
 #endif
 
-// Code for all architectures
+#ifdef WIN32
+
+#else
 
 CAMLprim value
 set_up_and_running(value dev)
@@ -430,4 +436,4 @@ iface_next(value ifap)
   CAMLreturn(ret);
 }
 
-
+#endif /* ! WIN32 */
