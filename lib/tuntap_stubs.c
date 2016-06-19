@@ -27,6 +27,7 @@
 #endif /* __FreeBSD__ */
 #ifdef WIN32
 #include "../../WpdPack/Include/pcap/pcap.h"
+#define IFNAMSIZ 1024
 #else
 #include <err.h>
 #include <arpa/inet.h>
@@ -100,7 +101,9 @@ get_macaddr(value devname)
 {
   CAMLparam1(devname);
   CAMLlocal1(hwaddr);
-
+#ifdef WIN32
+  caml_failwith("get_macaddr");
+#else
   int fd;
   struct ifreq ifq;
 
@@ -114,7 +117,7 @@ get_macaddr(value devname)
 
   hwaddr = caml_alloc_string(6);
   memcpy(String_val(hwaddr), ifq.ifr_hwaddr.sa_data, 6);
-
+#endif
   CAMLreturn (hwaddr);
 }
 
@@ -172,17 +175,73 @@ get_macaddr(value devname)
   memcpy(String_val(v_mac), mac_addr, 6);
   CAMLreturn (v_mac);
 }
+#elif WIN32
+
+CAMLprim value
+get_macaddr(value devname) 
+{
+  CAMLparam1(devname);
+  CAMLlocal1(hwaddr);
+  caml_failwith("get_macaddr");
+  CAMLreturn (hwaddr);
+}
+
 #endif
 
-#ifdef WIN32
+CAMLprim value
+getifaddrs_stub()
+{
+  CAMLparam0();
+  CAMLlocal1(opt);
 
+  int ret;
+#ifdef WIN32
+  pcap_if_t *ifap;
+  char errbuf[PCAP_ERRBUF_SIZE+1];
+  ret = pcap_findalldevs(&ifap, errbuf);
+  if (ret == -1)
+    tun_raise_error(errbuf, -1);
 #else
+  struct ifaddrs *ifap = NULL;
+  ret = getifaddrs(&ifap);
+  if (ret == -1)
+    tun_raise_error("getifaddrs", -1);
+#endif
+  if (ifap == NULL)
+    CAMLreturn(Val_int(0));
+  else
+    {
+      opt = caml_alloc(1, 0);
+      Store_field(opt, 0, (value)ifap);
+      CAMLreturn(opt);
+    }
+}
+
+CAMLprim value
+freeifaddrs_stub(value ifap)
+{
+#ifdef WIN32
+  pcap_freealldevs((pcap_if_t *)ifap);
+#else
+  freeifaddrs((struct ifaddrs *)ifap);
+#endif
+  return Val_unit;
+}
+
+CAMLprim value
+get_ifnamsiz()
+{
+  CAMLparam0();
+  CAMLreturn(Val_int(IFNAMSIZ));
+}
 
 CAMLprim value
 set_up_and_running(value dev)
 {
   CAMLparam1(dev);
-
+#ifdef WIN32
+  caml_failwith("set_up_and_running");
+#else
   int fd;
   struct ifreq ifr;
   int flags;
@@ -206,7 +265,7 @@ set_up_and_running(value dev)
     if (ioctl(fd, SIOCSIFFLAGS, &ifr) == -1)
       tun_raise_error("set_up_and_running SIOCSIFFLAGS", -1);
   }
-
+#endif
   CAMLreturn(Val_unit);
 }
 
@@ -214,7 +273,9 @@ CAMLprim value
 set_ipv4(value dev, value ipv4, value netmask)
 {
   CAMLparam3(dev, ipv4, netmask);
-
+#ifdef WIN32
+  caml_failwith("set_ipv4");
+#else
   int fd;
   struct ifreq ifr;
   struct sockaddr_in* addr = (struct sockaddr_in*)&ifr.ifr_addr;
@@ -245,7 +306,7 @@ set_ipv4(value dev, value ipv4, value netmask)
 
   // Set interface up and running
   set_up_and_running(dev);
-
+#endif
   CAMLreturn(Val_unit);
 }
 
@@ -267,6 +328,9 @@ tun_opendev(value devname, value kind, value pi, value persist, value user, valu
   memset(dev, 0, sizeof dev);
   memcpy(dev, String_val(devname), caml_string_length(devname));
 
+#ifdef WIN32
+  caml_failwith("tun_opendev");
+#else
   // All errors are already checked by tun_alloc, returned fd is valid
   // otherwise it would have crashed before
   fd = tun_alloc(dev, Int_val(kind), Bool_val(pi), Int_val(persist), Int_val(user), Int_val(group));
@@ -276,7 +340,7 @@ tun_opendev(value devname, value kind, value pi, value persist, value user, valu
 
   Store_field(res, 0, Val_int(fd));
   Store_field(res, 1, dev_caml);
-
+#endif
   CAMLreturn(res);
 }
 
@@ -284,42 +348,6 @@ CAMLprim value
 tun_opendev_byte(value *argv, int argn)
 {
   return tun_opendev(argv[0], argv[1], argv[2], argv[3], argv[4], argv[5]);
-}
-
-CAMLprim value
-get_ifnamsiz()
-{
-  CAMLparam0();
-  CAMLreturn(Val_int(IFNAMSIZ));
-}
-
-CAMLprim value
-getifaddrs_stub()
-{
-  CAMLparam0();
-  CAMLlocal1(opt);
-
-  int ret;
-  struct ifaddrs *ifap = NULL;
-  ret = getifaddrs(&ifap);
-  if (ret == -1)
-    tun_raise_error("getifaddrs", -1);
-
-  if (ifap == NULL)
-    CAMLreturn(Val_int(0));
-  else
-    {
-      opt = caml_alloc(1, 0);
-      Store_field(opt, 0, (value)ifap);
-      CAMLreturn(opt);
-    }
-}
-
-CAMLprim value
-freeifaddrs_stub(value ifap)
-{
-  freeifaddrs((struct ifaddrs *)ifap);
-  return Val_unit;
 }
 
 CAMLprim value caml_string_of_sa(struct sockaddr *sa)
@@ -341,7 +369,11 @@ CAMLprim value caml_string_of_sa(struct sockaddr *sa)
     case AF_INET6:
       sa_in6 = (struct sockaddr_in6 *)sa;
       ret = caml_alloc_string(16);
+#ifdef WIN32
+      caml_failwith("caml_string_of_sa");
+#else
       memcpy(String_val(ret), sa_in6->sin6_addr.s6_addr, 16);
+#endif
       break;
 
     default:
@@ -356,21 +388,37 @@ iface_get(value ifap)
 {
   CAMLparam0();
   CAMLlocal4(ret, opt1, opt2, opt3);
-
+  struct sockaddr *addr, *netmask, *broadaddr;
+#ifdef WIN32
+  pcap_if_t *c_ifap = (pcap_if_t *)ifap;
+#else
   struct ifaddrs *c_ifap = (struct ifaddrs *)ifap;
-
+#endif
   ret = caml_alloc(5, 0);
-
+#ifdef WIN32
+  addr = c_ifap->addresses->addr;
+  netmask = c_ifap->addresses->netmask;
+  broadaddr = c_ifap->addresses->broadaddr;
+  Store_field(ret, 0, caml_copy_string(c_ifap->name));
+#else
+  addr = c_ifap->ifa_addr;
+  netmask = c_ifap->ifa_netmask;
+#if defined (__linux__)
+  broadaddr = c_ifap->ifa_ifu.ifu_broadaddr;
+#else
+  broadaddr = c_ifap->ifa_dstaddr;
+#endif
   Store_field(ret, 0, caml_copy_string(c_ifap->ifa_name));
+#endif
   Store_field(ret, 1, Val_int(2));
   Store_field(ret, 2, Val_int(0));
   Store_field(ret, 3, Val_int(0));
   Store_field(ret, 4, Val_int(0));
 
-  if (c_ifap->ifa_addr == NULL)
+  if (addr == NULL)
     CAMLreturn(ret);
 
-  switch (c_ifap->ifa_addr->sa_family)
+  switch (addr->sa_family)
     {
     case AF_INET:
       Store_field(ret, 1, Val_int(0));
@@ -380,27 +428,22 @@ iface_get(value ifap)
       break;
     }
 
-  if (c_ifap->ifa_addr->sa_family != AF_INET &&
-      c_ifap->ifa_addr->sa_family != AF_INET6)
+  if (addr->sa_family != AF_INET &&
+      addr->sa_family != AF_INET6)
     CAMLreturn(ret);
 
   opt1 = caml_alloc(1, 0);
-  Store_field(opt1, 0, caml_string_of_sa(c_ifap->ifa_addr));
+  Store_field(opt1, 0, caml_string_of_sa(addr));
   Store_field(ret, 2, opt1);
 
-  if (c_ifap->ifa_netmask != NULL)
+  if (netmask != NULL)
     {
       opt2 = caml_alloc(1, 0);
-      Store_field(opt2, 0, caml_string_of_sa(c_ifap->ifa_netmask));
+      Store_field(opt2, 0, caml_string_of_sa(netmask));
       Store_field(ret, 3, opt2);
     }
 
   // We want to extract the third sockaddr, be it broadcast or dst.
-#if defined (__linux__)
-  struct sockaddr *broadaddr = c_ifap->ifa_ifu.ifu_broadaddr;
-#else
-  struct sockaddr *broadaddr = c_ifap->ifa_dstaddr;
-#endif
 
   if (broadaddr != NULL &&
       /* XXX Work around *BSD bug. Github Pull Request #14 */
@@ -421,9 +464,11 @@ iface_next(value ifap)
   CAMLparam0();
   CAMLlocal1(caml_next);
   value ret;
-
+#ifdef WIN32
+  pcap_if_t *next = ((pcap_if_t *)ifap)->next;
+#else
   struct ifaddrs *next = ((struct ifaddrs *)ifap)->ifa_next;
-
+#endif
   if (next == NULL)
     ret = Val_int(0);
   else
@@ -436,4 +481,3 @@ iface_next(value ifap)
   CAMLreturn(ret);
 }
 
-#endif /* ! WIN32 */
